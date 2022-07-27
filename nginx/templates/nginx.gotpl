@@ -1,0 +1,40 @@
+{{/*@formatter:off*/}}
+{{- /*gotype: ingress-controller/nginx.Config*/ -}}
+# BuildTime: {{ now }}
+daemon off;
+{{- with .User }}
+user  {{ . }};
+{{- end }}
+
+{{- if eq .WorkerProcesses -1 }}
+worker_processes auto;
+{{- else }}
+worker_processes {{ printf "%d" .WorkerProcesses }};
+{{- end }}
+
+error_log  /dev/stdout notice;
+{{- with .PidFile }}
+pid        {{ . }};
+{{- end }}
+
+events {
+  worker_connections  {{ printf "%d" .WorkerConnections }};
+}
+
+http {
+  include       ./mime.types;
+  default_type  application/octet-stream;
+
+  sendfile        on;
+  #tcp_nopush     on;
+
+  keepalive_timeout  65;
+
+  #gzip  on;
+
+  map $host $prefix {
+    default '{{ .Prefix }}';
+  }
+
+  include ./http.conf;
+}

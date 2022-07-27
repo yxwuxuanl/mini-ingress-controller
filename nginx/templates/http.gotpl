@@ -1,0 +1,48 @@
+{{/*@formatter:off*/}}
+{{- /*gotype: ingress-controller/nginx.HttpConfig*/ -}}
+# BuildTime: {{ now }}
+log_format  main  {{ .LogFormat }};
+access_log  {{ .AccessLog }}  main;
+
+{{ range $serverName, $server := .Servers }}
+server {
+  server_name {{ $serverName }};
+  listen {{ printf "%d" $.Listen }};
+
+  {{- if eq $serverName "_" }}
+  location = /_/healthz {
+    access_log off;
+    return 200 'ok';
+  }
+
+  location ~ /_/dump-config/(nginx|http) {
+    default_type text/plain;
+    alias "$prefix/$1.conf";
+  }
+  {{- end }}
+
+  {{- $hasRootRoute := false -}}
+
+  {{ range $path, $location := $server.Locations }}
+  # IngressRef: {{ $location.IngressRef }}
+
+  {{- if eq $location.PathType "Prefix" }}
+  location {{ $location.Path.Path }} {
+  {{- if eq $location.Path.Path "/" }}
+  {{- $hasRootRoute = true -}}
+  {{- end }}
+  {{- else }}
+  location = {{ $location.Path.Path }} {
+  {{- end }}
+      proxy_set_header Host "$host";
+      proxy_pass {{ $location.ProxyPass }};
+  }
+  {{- end }}
+
+  {{- if not $hasRootRoute }}
+  location / {
+    return 404 'not found';
+  }
+  {{- end }}
+}
+{{ end }}
