@@ -39,14 +39,14 @@ func main() {
 		kubeClient = kube.NewInClusterClient()
 	}
 
-	ngxConf := &nginx.Config{
+	ngxConf := &nginx.Main{
 		WorkerProcesses:   *ngxWorkerProcesses,
 		WorkerConnections: *ngxWorkerConnections,
 		User:              *ngxUser,
 		Prefix:            *ngxPrefix,
 	}
 
-	httpConf := &nginx.HttpConfig{
+	httpConf := &nginx.Http{
 		LogFormat: *ngxLogFormat,
 		Listen:    *ngxListenPort,
 		AccessLog: *ngxAccessLog,

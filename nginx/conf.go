@@ -1,6 +1,9 @@
 package nginx
 
-import "ingress-controller/ingress"
+import (
+	"ingress-controller/ingress"
+	"net/url"
+)
 
 type Path struct {
 	Path     string
@@ -15,18 +18,18 @@ func (p Path) String() string {
 	return p.Path + " (Exact)"
 }
 
-type LocationConfig struct {
+type Location struct {
 	Path
-	ProxyPass  string
+	Upstream   *url.URL
 	IngressRef string
 }
 
-type ServerConfig struct {
+type Server struct {
 	ServerName string
-	Locations  map[Path]*LocationConfig
+	Locations  map[Path]*Location
 }
 
-type Config struct {
+type Main struct {
 	WorkerProcesses   int
 	WorkerConnections int
 	User              string
@@ -34,9 +37,14 @@ type Config struct {
 	Prefix            string
 }
 
-type HttpConfig struct {
+type Http struct {
 	LogFormat string
 	AccessLog string
 	Listen    int
-	Servers   map[string]*ServerConfig
+	Servers   map[string]*Server
+}
+
+type HttpTplData struct {
+	*Http
+	NgxPrefix string
 }

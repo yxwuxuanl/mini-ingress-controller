@@ -1,10 +1,10 @@
 {{/*@formatter:off*/}}
-{{- /*gotype: ingress-controller/nginx.HttpConfig*/ -}}
+{{- /*gotype: ingress-controller/nginx.HttpTplData*/ -}}
 # BuildTime: {{ now }}
 log_format  main  {{ .LogFormat }};
 access_log  {{ .AccessLog }}  main;
 
-{{ range $serverName, $server := .Servers }}
+{{ range $serverName, $server := .Http.Servers }}
 server {
   server_name {{ $serverName }};
   listen {{ printf "%d" $.Listen }};
@@ -17,7 +17,7 @@ server {
 
   location ~ /_/dump-config/(nginx|http) {
     default_type text/plain;
-    alias "$prefix/$1.conf";
+    alias "{{ $.NgxPrefix }}/$1.conf";
   }
   {{- end }}
 
@@ -35,7 +35,7 @@ server {
   location = {{ $location.Path.Path }} {
   {{- end }}
       proxy_set_header Host "$host";
-      proxy_pass {{ $location.ProxyPass }};
+      proxy_pass {{ printf "%s" $location.Upstream }};
   }
   {{- end }}
 

@@ -29,6 +29,8 @@ var (
 	httpTpl  *template.Template
 )
 
+var noNgx = os.Getenv("NO_NGINX") == "1"
+
 func init() {
 	var err error
 
@@ -48,13 +50,13 @@ func init() {
 }
 
 type Nginx struct {
-	mainConf *Config
-	httpConf *HttpConfig
+	mainConf *Main
+	httpConf *Http
 	cmd      *exec.Cmd
 	stopCh   chan struct{}
 }
 
-func (ngx *Nginx) AddLocation(host string, loc *LocationConfig) error {
+func (ngx *Nginx) AddLocation(host string, loc *Location) error {
 	if host == "" {
 		host = "_"
 
@@ -66,9 +68,9 @@ func (ngx *Nginx) AddLocation(host string, loc *LocationConfig) error {
 	server, ok := ngx.httpConf.Servers[host]
 
 	if !ok {
-		server = &ServerConfig{
+		server = &Server{
 			ServerName: host,
-			Locations:  map[Path]*LocationConfig{},
+			Locations:  map[Path]*Location{},
 		}
 
 		ngx.httpConf.Servers[host] = server
@@ -84,7 +86,7 @@ func (ngx *Nginx) AddLocation(host string, loc *LocationConfig) error {
 	return nil
 }
 
-func (ngx *Nginx) DeleteLocation(host string, loc *LocationConfig) {
+func (ngx *Nginx) DeleteLocation(host string, loc *Location) {
 	if host == "" {
 		host = "_"
 	}
@@ -113,7 +115,19 @@ func (ngx *Nginx) DeleteLocation(host string, loc *LocationConfig) {
 func (ngx *Nginx) BuildHttpConfig() error {
 	var buf bytes.Buffer
 
-	if err := httpTpl.Execute(&buf, ngx.httpConf); err != nil {
+	if _, ok := ngx.httpConf.Servers["_"]; !ok {
+		ngx.httpConf.Servers["_"] = &Server{
+			ServerName: "_",
+			Locations:  map[Path]*Location{},
+		}
+	}
+
+	data := &HttpTplData{
+		Http:      ngx.httpConf,
+		NgxPrefix: ngx.mainConf.Prefix,
+	}
+
+	if err := httpTpl.Execute(&buf, data); err != nil {
 		return err
 	}
 
@@ -131,7 +145,7 @@ func (ngx *Nginx) BuildMainConfig() error {
 }
 
 func (ngx *Nginx) Reload() {
-	if os.Getenv("NO_NGINX") == "1" {
+	if noNgx {
 		return
 	}
 
@@ -143,7 +157,7 @@ func (ngx *Nginx) Reload() {
 }
 
 func (ngx *Nginx) Run() error {
-	if os.Getenv("NO_NGINX") == "1" {
+	if noNgx {
 		return nil
 	}
 
@@ -163,7 +177,7 @@ func (ngx *Nginx) Run() error {
 }
 
 func (ngx *Nginx) Shutdown() {
-	if os.Getenv("NO_NGINX") == "1" {
+	if noNgx {
 		return
 	}
 
@@ -174,8 +188,8 @@ func (ngx *Nginx) Shutdown() {
 	<-ngx.stopCh
 }
 
-func New(mainConf *Config, httpConf *HttpConfig) *Nginx {
-	httpConf.Servers = map[string]*ServerConfig{}
+func New(mainConf *Main, httpConf *Http) *Nginx {
+	httpConf.Servers = map[string]*Server{}
 
 	return &Nginx{
 		mainConf: mainConf,

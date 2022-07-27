@@ -6,6 +6,7 @@ import (
 	"ingress-controller/ingress"
 	"ingress-controller/nginx"
 	"log"
+	"net/url"
 )
 
 type Controller struct {
@@ -78,7 +79,7 @@ func New(ngx *nginx.Nginx) *Controller {
 	}
 }
 
-func path2Location(is *ingress.Ingress, path *ingress.Path) *nginx.LocationConfig {
+func path2Location(is *ingress.Ingress, path *ingress.Path) *nginx.Location {
 	svc := path.Backend.Service
 
 	var pathType string
@@ -89,13 +90,19 @@ func path2Location(is *ingress.Ingress, path *ingress.Path) *nginx.LocationConfi
 		pathType = ingress.PathTypePrefix
 	}
 
-	return &nginx.LocationConfig{
+	if path.Path == "" {
+		path.Path = "/"
+	}
+
+	ups, _ := url.Parse(fmt.Sprintf("http://%s.%s:%d", svc.Name, is.Metadata.Namespace, svc.Port.Number))
+
+	return &nginx.Location{
 		Path: nginx.Path{
 			Path:     path.Path,
 			PathType: pathType,
 		},
 		IngressRef: is.Metadata.FullName(),
-		ProxyPass:  fmt.Sprintf("http://%s.%s:%d", svc.Name, is.Metadata.Namespace, svc.Port.Number),
+		Upstream:   ups,
 	}
 }
 
