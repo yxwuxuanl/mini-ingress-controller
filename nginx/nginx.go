@@ -4,6 +4,7 @@ import (
 	"bytes"
 	_ "embed"
 	"errors"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -17,6 +18,8 @@ import (
 const MainLogFormat = `'$remote_addr - $remote_user [$time_local] "$request" '
 '$status $body_bytes_sent "$http_referer" '
 '"$http_user_agent" "$http_x_forwarded_for"'`
+
+var Prefix = flag.String("ngx.prefix", "/etc/nginx", "")
 
 //go:embed templates/nginx.gotpl
 var _nginxTpl string
@@ -61,7 +64,7 @@ func (ngx *Nginx) AddLocation(host string, loc *Location) error {
 		host = "_"
 
 		if loc.Path.Path == "/" {
-			return errors.New("definition is not allowed")
+			return errors.New("nginx: definition is not allowed")
 		}
 	}
 
@@ -86,7 +89,7 @@ func (ngx *Nginx) AddLocation(host string, loc *Location) error {
 	return nil
 }
 
-func (ngx *Nginx) DeleteLocation(host string, loc *Location) {
+func (ngx *Nginx) DeleteLocation(host string, isRef string) {
 	if host == "" {
 		host = "_"
 	}
@@ -100,14 +103,14 @@ func (ngx *Nginx) DeleteLocation(host string, loc *Location) {
 	var locNum int
 
 	for p, _loc := range server.Locations {
-		if p.String() == loc.String() && _loc.IngressRef == loc.IngressRef {
+		if _loc.IngressRef == isRef {
 			delete(server.Locations, p)
 		} else {
 			locNum++
 		}
 	}
 
-	if locNum == 0 && host != "_" {
+	if locNum == 0 {
 		delete(ngx.httpConf.Servers, host)
 	}
 }
@@ -115,23 +118,16 @@ func (ngx *Nginx) DeleteLocation(host string, loc *Location) {
 func (ngx *Nginx) BuildHttpConfig() error {
 	var buf bytes.Buffer
 
-	if _, ok := ngx.httpConf.Servers["_"]; !ok {
-		ngx.httpConf.Servers["_"] = &Server{
-			ServerName: "_",
-			Locations:  map[Path]*Location{},
-		}
-	}
-
 	data := &HttpTplData{
 		Http:      ngx.httpConf,
-		NgxPrefix: ngx.mainConf.Prefix,
+		NgxPrefix: *Prefix,
 	}
 
 	if err := httpTpl.Execute(&buf, data); err != nil {
 		return err
 	}
 
-	return ioutil.WriteFile(ngx.mainConf.Prefix+"/http.conf", buf.Bytes(), 0777)
+	return ioutil.WriteFile(*Prefix+"/http.conf", buf.Bytes(), 0777)
 }
 
 func (ngx *Nginx) BuildMainConfig() error {
@@ -141,7 +137,7 @@ func (ngx *Nginx) BuildMainConfig() error {
 		return err
 	}
 
-	return ioutil.WriteFile(ngx.mainConf.Prefix+"/nginx.conf", buf.Bytes(), 0777)
+	return ioutil.WriteFile(*Prefix+"/nginx.conf", buf.Bytes(), 0777)
 }
 
 func (ngx *Nginx) Reload() {
@@ -161,7 +157,7 @@ func (ngx *Nginx) Run() error {
 		return nil
 	}
 
-	cmd := exec.Command("nginx", "-p", ngx.mainConf.Prefix)
+	cmd := exec.Command("nginx", "-p", *Prefix)
 
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout

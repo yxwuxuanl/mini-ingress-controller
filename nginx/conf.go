@@ -1,8 +1,9 @@
 package nginx
 
 import (
-	"ingress-controller/ingress"
-	"net/url"
+	"fmt"
+	"ingress-controller/kube/ingress"
+	"strings"
 )
 
 type Path struct {
@@ -18,10 +19,36 @@ func (p Path) String() string {
 	return p.Path + " (Exact)"
 }
 
+type Directive struct {
+	Directive string
+	Args      []string
+}
+
+func (d Directive) String() string {
+	return fmt.Sprintf("%s %s", d.Directive, strings.Join(d.Args, " "))
+}
+
+type ProxyPassConf struct {
+	Upstream string
+}
+
+type BasicAuthConf struct {
+	Realm    string
+	UserFile string
+}
+
 type Location struct {
 	Path
-	Upstream   *url.URL
-	IngressRef string
+	ProxyPass        *ProxyPassConf
+	BasicAuth        *BasicAuthConf
+	Return           *ReturnConf
+	DisableAccessLog bool
+	IngressRef       string
+}
+
+type ReturnConf struct {
+	StatusCode int
+	Status     string
 }
 
 type Server struct {
@@ -34,7 +61,6 @@ type Main struct {
 	WorkerConnections int
 	User              string
 	PidFile           string
-	Prefix            string
 }
 
 type Http struct {

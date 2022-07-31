@@ -18,7 +18,9 @@ const (
 	EventModify = "MODIFIED"
 )
 
-type listWatchFunc func(r *http.Request)
+type Object interface {
+	Name() string
+}
 
 type Metadata struct {
 	Name              string            `json:"name"`
@@ -30,11 +32,20 @@ type Metadata struct {
 	Annotations       map[string]string `json:"annotations"`
 }
 
-func (m *Metadata) FullName() string {
-	return m.Namespace + "/" + m.Name
+type ReadFunc func(r *http.Request)
+
+type Event[T any] struct {
+	Type   string `json:"type"`
+	Object T      `json:"object"`
 }
 
-func List[T any](client Client, listFunc listWatchFunc, items *[]T) error {
+type WatchHandler[T Object] struct {
+	Added    func(T)
+	Deleted  func(T)
+	Modified func(T)
+}
+
+func List[T any](client Client, listFunc ReadFunc, items *[]T) error {
 	r := client.Request()
 	listFunc(r)
 
@@ -63,44 +74,96 @@ func List[T any](client Client, listFunc listWatchFunc, items *[]T) error {
 	return nil
 }
 
-type Event[T any] struct {
-	Type   string `json:"type"`
-	Object T      `json:"object"`
-}
-
-func Watch[T any](
-	ctx context.Context,
-	client Client,
-	watchFunc listWatchFunc,
-	ch chan<- Event[T],
-) error {
+func Get[T Object](client Client, listFunc ReadFunc, obj T) error {
 	r := client.Request()
+	listFunc(r)
 
-	watchFunc(r)
-
-	res, err := client.Do(r.WithContext(ctx))
+	res, err := client.Do(r)
 
 	if err != nil {
 		return err
 	}
 
-	reader := bufio.NewReader(res.Body)
-	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return errors.New("http: " + res.Status)
+	}
 
-	for {
-		chunk, _, err := reader.ReadLine()
+	defer res.Body.Close()
+	return json.NewDecoder(res.Body).Decode(obj)
+}
+
+func Watch[T Object](
+	ctx context.Context,
+	client Client,
+	watchFunc ReadFunc,
+	handler WatchHandler[T],
+) {
+	eventCh := make(chan Event[T])
+	defer close(eventCh)
+
+	doWatch := func() error {
+		r := client.Request()
+		watchFunc(r)
+
+		log.Printf("watch: watch %s", r.URL.Path)
+		res, err := client.Do(r.WithContext(ctx))
 
 		if err != nil {
 			return err
 		}
 
-		event := Event[T]{}
+		if res.StatusCode != http.StatusOK {
+			return errors.New("http: " + res.Status)
+		}
 
-		if err := json.Unmarshal(chunk, &event); err != nil {
-			log.Printf("kube: watch: unmarshal event error: %s", err)
+		reader := bufio.NewReader(res.Body)
+		defer res.Body.Close()
+
+		for {
+			chunk, _, err := reader.ReadLine()
+
+			if err != nil {
+				return err
+			}
+
+			event := Event[T]{}
+
+			if err := json.Unmarshal(chunk, &event); err != nil {
+				err = errors.New("watch: unmarshal event: " + err.Error())
+				continue
+			}
+
+			log.Printf("watch: %s %s", event.Type, event.Object.Name())
+			eventCh <- event
+		}
+	}
+
+	go func() {
+		for event := range eventCh {
+			switch event.Type {
+			case EventModify:
+				if handler.Modified != nil {
+					handler.Modified(event.Object)
+				}
+			case EventAdd:
+				if handler.Added != nil {
+					handler.Added(event.Object)
+				}
+			case EventDelete:
+				if handler.Deleted != nil {
+					handler.Deleted(event.Object)
+				}
+			}
+		}
+	}()
+
+	for {
+		if err := doWatch(); !errors.Is(err, context.Canceled) {
+			log.Printf("watch: %s", err)
+			time.Sleep(time.Second * 5)
 			continue
 		}
 
-		ch <- event
+		return
 	}
 }

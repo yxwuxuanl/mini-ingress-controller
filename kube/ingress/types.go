@@ -1,8 +1,15 @@
 package ingress
 
-import "ingress-controller/kube"
+import (
+	"flag"
+	"fmt"
+	"ingress-controller/kube"
+	"net/http"
+)
 
 const AnnotationKubernetesIngressClass = "kubernetes.io/ingress.class"
+
+var ingressClassName = flag.String("ingress-class", "", "")
 
 const (
 	PathTypePrefix                 = "Prefix"
@@ -37,4 +44,30 @@ type Service struct {
 	Port struct {
 		Number int `json:"number"`
 	} `json:"port"`
+}
+
+func (i *Ingress) Name() string {
+	return fmt.Sprintf("%s/%s", i.Metadata.Namespace, i.Metadata.Name)
+}
+
+func WatchFunc(r *http.Request) {
+	r.URL.Path = "/apis/networking.k8s.io/v1/watch/ingresses"
+}
+
+func ListFunc(r *http.Request) {
+	r.URL.Path = "/apis/networking.k8s.io/v1/ingresses"
+}
+
+func FilterIngress(is *Ingress) bool {
+	if *ingressClassName == "" {
+		return true
+	}
+
+	if annos := is.Metadata.Annotations; annos != nil {
+		if v, ok := annos[AnnotationKubernetesIngressClass]; ok {
+			return v == *ingressClassName
+		}
+	}
+
+	return false
 }
