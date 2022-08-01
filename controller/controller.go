@@ -15,7 +15,10 @@ import (
 	"path"
 )
 
-const ngxAuthFileDir = "authfiles/"
+const (
+	ngxAuthFileDir = "authfiles/"
+	ngxTlsDir      = "tls/"
+)
 
 type Controller struct {
 	issCache       map[string]*ingress.Ingress
@@ -26,6 +29,16 @@ type Controller struct {
 
 func getAuthFilename(sec *secret.Secret) string {
 	return sec.Metadata.Namespace + "." + sec.Metadata.Name
+}
+
+func getAuthAnno(is *ingress.Ingress) (namespace, name string) {
+	if name = is.Metadata.Annotations[annotation.AuthSecret]; name != "" {
+		if namespace = is.Metadata.Annotations[annotation.AuthSecretNamespace]; namespace == "" {
+			namespace = is.Metadata.Namespace
+		}
+	}
+
+	return
 }
 
 func (c *Controller) setupAuthSecret(namespace, name string, remake bool) (string, error) {
@@ -63,14 +76,8 @@ func (c *Controller) addIngress(is *ingress.Ingress) error {
 
 	var basicAuthConf *nginx.BasicAuthConf
 
-	if v, ok := is.Metadata.Annotations[annotation.AuthSecret]; ok {
-		ns := is.Metadata.Annotations[annotation.AuthSecretNamespace]
-
-		if ns == "" {
-			ns = is.Metadata.Namespace
-		}
-
-		if userfile, err := c.setupAuthSecret(ns, v, false); err != nil {
+	if ns, name := getAuthAnno(is); name != "" {
+		if userfile, err := c.setupAuthSecret(ns, name, false); err != nil {
 			return fmt.Errorf("setupAuthSecret: %s, ingress=%s", err, is.Name())
 		} else {
 			basicAuthConf = &nginx.BasicAuthConf{
@@ -115,8 +122,8 @@ func (c *Controller) deleteIngress(is *ingress.Ingress) {
 		c.ngx.DeleteLocation(rule.Host, is.Name())
 	}
 
-	if v, ok := is.Metadata.Annotations[annotation.AuthSecret]; ok {
-		c.secretInformer.Release(is.Metadata.Namespace, v)
+	if ns, name := getAuthAnno(is); name != "" {
+		c.secretInformer.Release(ns, name)
 	}
 
 	delete(c.issCache, is.Name())

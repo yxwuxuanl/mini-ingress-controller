@@ -53,9 +53,15 @@ type ReturnConf struct {
 	Status     string
 }
 
+type SSLConf struct {
+	Cert string
+	Key  string
+}
+
 type Server struct {
 	ServerName string
 	Locations  map[string]*Location
+	SSL        *SSLConf
 }
 
 type Main struct {
@@ -65,9 +71,14 @@ type Main struct {
 	PidFile           string
 }
 
+type ServerInfo struct {
+	ServerName string
+}
+
 type Http struct {
-	LogFormat string
-	AccessLog string
-	Listen    int
-	Servers   map[string]*Server
+	LogFormat  string
+	AccessLog  string
+	Listen     int
+	Servers    map[string]*Server
+	SSLServers map[string]*Server
 }

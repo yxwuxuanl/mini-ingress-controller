@@ -17,10 +17,15 @@ const (
 	PathTypeImplementationSpecific = "ImplementationSpecific"
 )
 
+type TLS struct {
+	SecretName string `json:"secretName"`
+}
+
 type Ingress struct {
 	Metadata *kube.Metadata `json:"metadata"`
 	Spec     struct {
 		Rules []*Rule `json:"rules"`
+		TLS   []*TLS  `json:"tls"`
 	} `json:"spec"`
 }
 

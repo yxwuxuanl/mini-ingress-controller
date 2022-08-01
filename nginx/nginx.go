@@ -60,7 +60,7 @@ type Nginx struct {
 	stopCh   chan struct{}
 }
 
-func (ngx *Nginx) AddLocation(host string, loc *Location) error {
+func (ngx *Nginx) AddLocation(host string, loc *Location, ssl *SSLConf) error {
 	if host == "" {
 		host = "_"
 
