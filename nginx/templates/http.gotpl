@@ -1,70 +1,57 @@
 {{/*@formatter:off*/}}
-{{- /*gotype: ingress-controller/nginx.HttpTplData*/ -}}
+{{- /*gotype: ingress-controller/nginx.Http*/ -}}
 # BuildTime: {{ now }}
 log_format  main  {{ .LogFormat }};
 access_log  {{ .AccessLog }}  main;
+default_type text/plain;
 
-{{- define "location" }}
-{{- /*gotype: ingress-controller/nginx.Location*/ -}}
-# IngressRef: {{ .IngressRef }}
-{{- if eq .PathType "Prefix" }}
-  location {{ .Path.Path }} {
-{{- else }}
-  location = {{ .Path.Path }} {
-{{- end }}
+{{ range $serverName, $server := .Servers }}
+server {
+  server_name {{ $serverName }};
+  {{- if eq $serverName "_" }}
+  listen {{ printf "%d" $.Listen }} default_server;
+  {{- else }}
+  listen {{ printf "%d" $.Listen }};
+  {{- end }}
 
-  {{- if .DisableAccessLog }}
+  {{- $hasRoot := false -}}
+  {{- range $path, $location := $server.Locations }}
+  {{- $loc := $location.Path.String }}
+  {{- if eq $loc "/" }}
+  {{- $hasRoot = true}}
+  {{- end }}
+  {{- with .IngressRef }}
+  # IngressRef: {{ . }}
+  {{- end}}
+  location {{ $loc }} {
+  {{- if $location.DisableAccessLog }}
     access_log off;
   {{- end }}
 
-  {{- with .BasicAuth }}
+  {{- with $location.BasicAuth }}
     auth_basic "{{ .Realm }}";
     auth_basic_user_file {{ .UserFile }};
   {{- end }}
 
-  {{- with .Return }}
+  {{- with $location.Return }}
     return {{ .StatusCode }} "{{ .Status }}";
   {{- end }}
 
-  {{- with .ProxyPass }}
+  {{- with $location.ProxyPass }}
     proxy_set_header Host "$host";
     proxy_pass {{ .Upstream }};
   {{- end }}
-  }
-{{- end }}
 
-server {
-  server_name _;
-  listen {{ printf "%d" .Http.Listen }};
-
-  location = /_/healthz {
-    access_log off;
-    return 200 'ok';
-  }
-
-  location ~ /_/dump-config/(nginx|http) {
-    default_type text/plain;
-    alias "{{ .NgxPrefix }}/$1.conf";
-  }
-
-  {{ range $serverName, $server := .Http.Servers }}
-  {{- if eq $serverName "_" }}
-  {{- range $path, $location := $server.Locations }}
-  {{ template "location" $location }}
+  {{- range $location.Directives }}
+    {{ printf "%s" . }};
   {{- end }}
+  }
   {{- end }}
-  {{- end }}
-}
 
-{{ range $serverName, $server := .Http.Servers }}
-{{- if ne $serverName "_" }}
-server {
-  server_name {{ $serverName }};
-  listen {{ printf "%d" $.Listen }};
-
-  {{- range $path, $location := $server.Locations }}
-  {{ template "location" $location }}
+  {{- if not $hasRoot }}
+  location / {
+    return 404 'not found';
+  }
   {{- end }}
 }
 {{- end }}
-{{ end }}

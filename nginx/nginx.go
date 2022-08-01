@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"ingress-controller/kube/ingress"
 	"io/ioutil"
 	"log"
 	"os"
@@ -73,7 +74,7 @@ func (ngx *Nginx) AddLocation(host string, loc *Location) error {
 	if !ok {
 		server = &Server{
 			ServerName: host,
-			Locations:  map[Path]*Location{},
+			Locations:  map[string]*Location{},
 		}
 
 		ngx.httpConf.Servers[host] = server
@@ -81,11 +82,11 @@ func (ngx *Nginx) AddLocation(host string, loc *Location) error {
 
 	locations := server.Locations
 
-	if _, ok := locations[loc.Path]; ok {
+	if loc, ok := locations[loc.Path.String()]; ok {
 		return fmt.Errorf("nginx: duplicated location %s", loc.Path)
 	}
 
-	locations[loc.Path] = loc
+	locations[loc.Path.String()] = loc
 	return nil
 }
 
@@ -102,9 +103,9 @@ func (ngx *Nginx) DeleteLocation(host string, isRef string) {
 
 	var locNum int
 
-	for p, _loc := range server.Locations {
-		if _loc.IngressRef == isRef {
-			delete(server.Locations, p)
+	for path, loc := range server.Locations {
+		if loc.IngressRef == isRef {
+			delete(server.Locations, path)
 		} else {
 			locNum++
 		}
@@ -118,12 +119,7 @@ func (ngx *Nginx) DeleteLocation(host string, isRef string) {
 func (ngx *Nginx) BuildHttpConfig() error {
 	var buf bytes.Buffer
 
-	data := &HttpTplData{
-		Http:      ngx.httpConf,
-		NgxPrefix: *Prefix,
-	}
-
-	if err := httpTpl.Execute(&buf, data); err != nil {
+	if err := httpTpl.Execute(&buf, ngx.httpConf); err != nil {
 		return err
 	}
 
@@ -185,7 +181,42 @@ func (ngx *Nginx) Shutdown() {
 }
 
 func New(mainConf *Main, httpConf *Http) *Nginx {
-	httpConf.Servers = map[string]*Server{}
+	healthz := &Location{
+		Path: Path{
+			Path:     "/_/healthz",
+			PathType: ingress.PathTypeExact,
+		},
+		Return: &ReturnConf{
+			Status:     "ok",
+			StatusCode: 200,
+		},
+		DisableAccessLog: true,
+	}
+
+	dumpConfig := &Location{
+		Path: Path{
+			Path:  "/_/dump-config/(nginx|http)",
+			Regex: true,
+		},
+		Directives: []Directive{
+			{
+				"alias",
+				fmt.Sprintf("%s/$1.conf", *Prefix),
+			},
+		},
+	}
+
+	locations := map[string]*Location{
+		healthz.Path.String():    healthz,
+		dumpConfig.Path.String(): dumpConfig,
+	}
+
+	httpConf.Servers = map[string]*Server{
+		"_": {
+			ServerName: "_",
+			Locations:  locations,
+		},
+	}
 
 	return &Nginx{
 		mainConf: mainConf,

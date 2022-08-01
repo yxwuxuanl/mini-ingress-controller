@@ -18,10 +18,10 @@ import (
 const ngxAuthFileDir = "authfiles/"
 
 type Controller struct {
-	issCache map[string]*ingress.Ingress
-	ngx      *nginx.Nginx
-	kc       kube.Client
-	sm       *secret.Manager
+	issCache       map[string]*ingress.Ingress
+	ngx            *nginx.Nginx
+	kc             kube.Client
+	secretInformer *kube.Informer[*secret.Secret]
 }
 
 func getAuthFilename(sec *secret.Secret) string {
@@ -29,7 +29,8 @@ func getAuthFilename(sec *secret.Secret) string {
 }
 
 func (c *Controller) setupAuthSecret(namespace, name string, remake bool) (string, error) {
-	sec, err := c.sm.Get(namespace, name)
+	sec := new(secret.Secret)
+	err := c.secretInformer.Get(namespace, name, secret.ReadFunc(namespace, name), &sec)
 
 	if err != nil {
 		return "", fmt.Errorf("get auth secret error: %s", err)
@@ -63,7 +64,13 @@ func (c *Controller) addIngress(is *ingress.Ingress) error {
 	var basicAuthConf *nginx.BasicAuthConf
 
 	if v, ok := is.Metadata.Annotations[annotation.AuthSecret]; ok {
-		if userfile, err := c.setupAuthSecret(is.Metadata.Namespace, v, false); err != nil {
+		ns := is.Metadata.Annotations[annotation.AuthSecretNamespace]
+
+		if ns == "" {
+			ns = is.Metadata.Namespace
+		}
+
+		if userfile, err := c.setupAuthSecret(ns, v, false); err != nil {
 			return fmt.Errorf("setupAuthSecret: %s, ingress=%s", err, is.Name())
 		} else {
 			basicAuthConf = &nginx.BasicAuthConf{
@@ -109,7 +116,7 @@ func (c *Controller) deleteIngress(is *ingress.Ingress) {
 	}
 
 	if v, ok := is.Metadata.Annotations[annotation.AuthSecret]; ok {
-		c.sm.Release(is.Metadata.Namespace, v)
+		c.secretInformer.Release(is.Metadata.Namespace, v)
 	}
 
 	delete(c.issCache, is.Name())
@@ -134,6 +141,7 @@ func (c *Controller) watch(ctx context.Context) {
 				if err := c.addIngress(is); err != nil {
 					log.Printf("controller: %s, ingress=%s", err, is.Name())
 				} else {
+					log.Printf("controller: add ingress %s", is.Name())
 					buildAndReload()
 				}
 			}
@@ -144,6 +152,7 @@ func (c *Controller) watch(ctx context.Context) {
 			}
 
 			if _, ok := c.issCache[is.Name()]; ok {
+				log.Printf("controller: delete ingress %s", is.Name())
 				c.deleteIngress(is)
 				buildAndReload()
 			}
@@ -158,6 +167,8 @@ func (c *Controller) watch(ctx context.Context) {
 			} else {
 				c.deleteIngress(is)
 			}
+
+			log.Printf("controller: modify ingress %s", is.Name())
 
 			if err := c.addIngress(is); err != nil {
 				log.Printf("controller: %s, ingress=%s", err, is.Name())
@@ -180,6 +191,7 @@ func (c *Controller) Run(ctx context.Context) error {
 
 	onSecretModify := func(secret *secret.Secret) {
 		_, err := c.setupAuthSecret(secret.Metadata.Namespace, secret.Metadata.Name, true)
+		log.Printf("controller: modify secret %s", secret.Name())
 
 		if err != nil {
 			log.Printf("controller: setupAuthSecret: %s", err)
@@ -191,13 +203,29 @@ func (c *Controller) Run(ctx context.Context) error {
 
 	onSecretRelease := func(secret *secret.Secret) {
 		authfile := path.Join(*nginx.Prefix, ngxAuthFileDir, getAuthFilename(secret))
+		log.Printf("controller: release secret %s", secret.Name())
+
 		if err := os.Remove(authfile); err != nil {
 			log.Printf("controller: delete authfile error: %s", err)
 		}
 	}
 
-	sm := secret.NewSecretManager(c.kc, onSecretModify, onSecretRelease)
-	c.sm = sm
+	c.secretInformer = &kube.Informer[*secret.Secret]{
+		Client:    c.kc,
+		OnModify:  onSecretModify,
+		OnRelease: onSecretRelease,
+		WatchFunc: secret.WatchFunc,
+	}
+
+	c.secretInformer.Init()
+
+	authfileDir := path.Join(*nginx.Prefix, ngxAuthFileDir)
+
+	if _, err := os.Stat(authfileDir); os.IsNotExist(err) {
+		if err := os.Mkdir(authfileDir, 0777); err != nil {
+			return err
+		}
+	}
 
 	for _, is := range iss {
 		if ingress.FilterIngress(is) {
@@ -212,7 +240,7 @@ func (c *Controller) Run(ctx context.Context) error {
 	}
 
 	go c.watch(ctx)
-	go sm.Run(ctx)
+	go c.secretInformer.Run(ctx)
 
 	return c.ngx.Run()
 }

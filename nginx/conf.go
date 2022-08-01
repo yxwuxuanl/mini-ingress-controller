@@ -1,7 +1,6 @@
 package nginx
 
 import (
-	"fmt"
 	"ingress-controller/kube/ingress"
 	"strings"
 )
@@ -9,23 +8,25 @@ import (
 type Path struct {
 	Path     string
 	PathType string
+	Regex    bool
 }
 
 func (p Path) String() string {
-	if p.PathType == ingress.PathTypePrefix {
-		return p.Path
+	if p.Regex {
+		return "~* " + p.Path
 	}
 
-	return p.Path + " (Exact)"
+	if p.PathType == ingress.PathTypeExact {
+		return "= " + p.Path
+	}
+
+	return p.Path
 }
 
-type Directive struct {
-	Directive string
-	Args      []string
-}
+type Directive []string
 
 func (d Directive) String() string {
-	return fmt.Sprintf("%s %s", d.Directive, strings.Join(d.Args, " "))
+	return strings.Join(d, " ")
 }
 
 type ProxyPassConf struct {
@@ -44,6 +45,7 @@ type Location struct {
 	Return           *ReturnConf
 	DisableAccessLog bool
 	IngressRef       string
+	Directives       []Directive
 }
 
 type ReturnConf struct {
@@ -53,7 +55,7 @@ type ReturnConf struct {
 
 type Server struct {
 	ServerName string
-	Locations  map[Path]*Location
+	Locations  map[string]*Location
 }
 
 type Main struct {
@@ -68,9 +70,4 @@ type Http struct {
 	AccessLog string
 	Listen    int
 	Servers   map[string]*Server
-}
-
-type HttpTplData struct {
-	*Http
-	NgxPrefix string
 }

@@ -51,6 +51,8 @@ func List[T any](client Client, listFunc ReadFunc, items *[]T) error {
 
 	res, err := client.Do(r)
 
+	log.Printf("kube: list %s", r.URL.Path)
+
 	if err != nil {
 		return err
 	}
@@ -79,6 +81,7 @@ func Get[T Object](client Client, listFunc ReadFunc, obj T) error {
 	listFunc(r)
 
 	res, err := client.Do(r)
+	log.Printf("kube: read %s", r.URL.Path)
 
 	if err != nil {
 		return err
@@ -105,7 +108,7 @@ func Watch[T Object](
 		r := client.Request()
 		watchFunc(r)
 
-		log.Printf("watch: watch %s", r.URL.Path)
+		log.Printf("kube: watch %s", r.URL.Path)
 		res, err := client.Do(r.WithContext(ctx))
 
 		if err != nil {
@@ -133,7 +136,6 @@ func Watch[T Object](
 				continue
 			}
 
-			log.Printf("watch: %s %s", event.Type, event.Object.Name())
 			eventCh <- event
 		}
 	}
@@ -159,7 +161,7 @@ func Watch[T Object](
 
 	for {
 		if err := doWatch(); !errors.Is(err, context.Canceled) {
-			log.Printf("watch: %s", err)
+			log.Printf("kube: watch: %s", err)
 			time.Sleep(time.Second * 5)
 			continue
 		}
