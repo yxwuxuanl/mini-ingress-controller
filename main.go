@@ -42,6 +42,7 @@ func main() {
 	httpConf := &nginx.Http{
 		LogFormat: *ngxLogFormat,
 		Listen:    *ngxListenPort,
+		TLSListen: *ngxHttpsListenPort,
 		AccessLog: *ngxAccessLog,
 	}
 

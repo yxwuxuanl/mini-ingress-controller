@@ -6,6 +6,11 @@ import (
 	"net/http"
 )
 
+const (
+	TypeOpaque = "Opaque"
+	TypeTLS    = "kubernetes.io/tls"
+)
+
 type Secret struct {
 	Metadata *kube.Metadata    `json:"metadata"`
 	Data     map[string][]byte `json:"data"`

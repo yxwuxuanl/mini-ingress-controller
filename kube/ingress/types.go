@@ -18,7 +18,8 @@ const (
 )
 
 type TLS struct {
-	SecretName string `json:"secretName"`
+	SecretName string   `json:"secretName"`
+	Host       []string `json:"hosts"`
 }
 
 type Ingress struct {

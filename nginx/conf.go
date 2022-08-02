@@ -53,7 +53,7 @@ type ReturnConf struct {
 	Status     string
 }
 
-type SSLConf struct {
+type TLSConf struct {
 	Cert string
 	Key  string
 }
@@ -61,7 +61,7 @@ type SSLConf struct {
 type Server struct {
 	ServerName string
 	Locations  map[string]*Location
-	SSL        *SSLConf
+	SSL        *TLSConf
 }
 
 type Main struct {
@@ -71,14 +71,25 @@ type Main struct {
 	PidFile           string
 }
 
-type ServerInfo struct {
-	ServerName string
-}
-
 type Http struct {
 	LogFormat  string
 	AccessLog  string
 	Listen     int
+	TLSListen  int
 	Servers    map[string]*Server
 	SSLServers map[string]*Server
+}
+
+func (h *Http) AllServers() []*Server {
+	var ss []*Server
+
+	for _, server := range h.Servers {
+		ss = append(ss, server)
+	}
+
+	for _, server := range h.SSLServers {
+		ss = append(ss, server)
+	}
+
+	return ss
 }

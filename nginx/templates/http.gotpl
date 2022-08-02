@@ -5,13 +5,22 @@ log_format  main  {{ .LogFormat }};
 access_log  {{ .AccessLog }}  main;
 default_type text/plain;
 
-{{ range $serverName, $server := .Servers }}
+{{ range $_, $server := .AllServers }}
 server {
-  server_name {{ $serverName }};
-  {{- if eq $serverName "_" }}
+  server_name {{ $server.ServerName }};
+  {{- if eq $server.ServerName "_" }}
   listen {{ printf "%d" $.Listen }} default_server;
   {{- else }}
+{{- if $server.SSL }}
+  listen {{ printf "%d" $.TLSListen }} ssl;
+  {{- else }}
   listen {{ printf "%d" $.Listen }};
+  {{- end }}
+  {{- end }}
+
+  {{- with $server.SSL }}
+  ssl_certificate {{ .Cert }};
+  ssl_certificate_key {{ .Key }};
   {{- end }}
 
   {{- $hasRoot := false -}}
@@ -38,7 +47,13 @@ server {
   {{- end }}
 
   {{- with $location.ProxyPass }}
-    proxy_set_header Host "$host";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Host $host;
+    proxy_set_header X-Forwarded-Port $server_port;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_buffering on;
     proxy_pass {{ .Upstream }};
   {{- end }}
 

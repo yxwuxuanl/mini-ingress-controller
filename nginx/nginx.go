@@ -60,24 +60,46 @@ type Nginx struct {
 	stopCh   chan struct{}
 }
 
-func (ngx *Nginx) AddLocation(host string, loc *Location, ssl *SSLConf) error {
+func (ngx *Nginx) AddLocation(host string, loc *Location, tlsConf *TLSConf) error {
 	if host == "" {
 		host = "_"
 
 		if loc.Path.Path == "/" {
 			return errors.New("nginx: definition is not allowed")
 		}
+
+		tlsConf = nil
 	}
 
-	server, ok := ngx.httpConf.Servers[host]
+	var server *Server
 
-	if !ok {
-		server = &Server{
-			ServerName: host,
-			Locations:  map[string]*Location{},
+	if tlsConf != nil {
+		server = ngx.httpConf.SSLServers[host]
+
+		if server != nil {
+			if server.SSL.Key != tlsConf.Key || server.SSL.Cert != tlsConf.Cert {
+				return fmt.Errorf("nginx: ssl certificate conflict, host=%s", host)
+			}
+		} else {
+			server = &Server{
+				ServerName: host,
+				Locations:  map[string]*Location{},
+				SSL:        tlsConf,
+			}
+
+			ngx.httpConf.SSLServers[host] = server
 		}
+	} else {
+		server = ngx.httpConf.Servers[host]
 
-		ngx.httpConf.Servers[host] = server
+		if server == nil {
+			server = &Server{
+				ServerName: host,
+				Locations:  map[string]*Location{},
+			}
+
+			ngx.httpConf.Servers[host] = server
+		}
 	}
 
 	locations := server.Locations
@@ -87,6 +109,7 @@ func (ngx *Nginx) AddLocation(host string, loc *Location, ssl *SSLConf) error {
 	}
 
 	locations[loc.Path.String()] = loc
+	log.Printf("nginx: add location %s, server_name=%s", loc.Path.String(), host)
 	return nil
 }
 
@@ -95,24 +118,31 @@ func (ngx *Nginx) DeleteLocation(host string, isRef string) {
 		host = "_"
 	}
 
-	server, ok := ngx.httpConf.Servers[host]
-
-	if !ok {
-		return
-	}
-
-	var locNum int
-
-	for path, loc := range server.Locations {
-		if loc.IngressRef == isRef {
-			delete(server.Locations, path)
-		} else {
-			locNum++
+	doDelete := func(s *Server) (deleteServer bool) {
+		if s == nil {
+			return false
 		}
+
+		var locNum int
+
+		for path, loc := range s.Locations {
+			if loc.IngressRef == isRef {
+				delete(s.Locations, path)
+				log.Printf("nginx: delete location %s, server_name=%s", path, s.ServerName)
+			} else {
+				locNum++
+			}
+		}
+
+		return locNum == 0
 	}
 
-	if locNum == 0 {
+	if doDelete(ngx.httpConf.Servers[host]) {
 		delete(ngx.httpConf.Servers, host)
+	}
+
+	if doDelete(ngx.httpConf.SSLServers[host]) {
+		delete(ngx.httpConf.SSLServers, host)
 	}
 }
 
@@ -142,9 +172,7 @@ func (ngx *Nginx) Reload() {
 	}
 
 	if err := ngx.cmd.Process.Signal(syscall.SIGHUP); err != nil {
-		log.Printf("nginx: SIGHUP: %s", err)
-	} else {
-		log.Printf("nginx: reload success")
+		log.Printf("nginx: reload error: %s", err)
 	}
 }
 
@@ -174,7 +202,7 @@ func (ngx *Nginx) Shutdown() {
 	}
 
 	if err := ngx.cmd.Process.Signal(syscall.SIGQUIT); err != nil {
-		log.Printf("nginx: SIGQUIT: %s", err)
+		log.Printf("nginx: shutdown error: %s", err)
 	}
 
 	<-ngx.stopCh
@@ -206,9 +234,19 @@ func New(mainConf *Main, httpConf *Http) *Nginx {
 		},
 	}
 
+	stub := &Location{
+		Path: Path{
+			Path:     "/_/stub_status",
+			PathType: ingress.PathTypeExact,
+		},
+		DisableAccessLog: true,
+		Directives:       []Directive{{"stub_status"}},
+	}
+
 	locations := map[string]*Location{
 		healthz.Path.String():    healthz,
 		dumpConfig.Path.String(): dumpConfig,
+		stub.Path.String():       stub,
 	}
 
 	httpConf.Servers = map[string]*Server{
@@ -217,6 +255,8 @@ func New(mainConf *Main, httpConf *Http) *Nginx {
 			Locations:  locations,
 		},
 	}
+
+	httpConf.SSLServers = map[string]*Server{}
 
 	return &Nginx{
 		mainConf: mainConf,
