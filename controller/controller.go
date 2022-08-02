@@ -46,13 +46,19 @@ func getAuthSecretInfo(is *ingress.Ingress) (namespace, name string) {
 	return
 }
 
-func (c *Controller) setupAuthSecret(namespace, name string, remake bool) (string, error) {
+func (c *Controller) setupAuthSecret(namespace, name string, remake bool) (userfile string, err error) {
 	sec := new(secret.Secret)
-	err := c.secretInformer.Get(namespace, name, secret.ReadFunc(namespace, name), &sec)
+	err = c.secretInformer.Get(namespace, name, secret.ReadFunc(namespace, name), &sec)
 
 	if err != nil {
 		return "", fmt.Errorf("get auth secret error: %s", err)
 	}
+
+	defer func() {
+		if err != nil {
+			c.secretInformer.Release(namespace, name)
+		}
+	}()
 
 	filepath := path.Join(*nginx.Prefix, ngxAuthFileDir, getSecretFilename(sec.Metadata))
 
@@ -82,6 +88,12 @@ func (c *Controller) setupTlsSecret(namespace, name string, remake bool) (crt st
 	if err != nil {
 		return "", "", err
 	}
+
+	defer func() {
+		if err != nil {
+			c.secretInformer.Release(namespace, name)
+		}
+	}()
 
 	write := func(key string) (string, error) {
 		data := sec.Data[key]
