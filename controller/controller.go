@@ -28,11 +28,15 @@ type Controller struct {
 	secretInformer *kube.Informer[*secret.Secret]
 }
 
-func getFilename(mt *kube.Metadata) string {
+func getSecretFilename(mt *kube.Metadata) string {
 	return mt.Namespace + "-" + mt.Name
 }
 
-func getAuthSecret(is *ingress.Ingress) (namespace, name string) {
+func withoutNgxPrefix(p string) string {
+	return strings.TrimPrefix(p, *nginx.Prefix+"/")
+}
+
+func getAuthSecretInfo(is *ingress.Ingress) (namespace, name string) {
 	if name = is.Metadata.Annotations[annotation.AuthSecret]; name != "" {
 		if namespace = is.Metadata.Annotations[annotation.AuthSecretNamespace]; namespace == "" {
 			namespace = is.Metadata.Namespace
@@ -50,12 +54,11 @@ func (c *Controller) setupAuthSecret(namespace, name string, remake bool) (strin
 		return "", fmt.Errorf("get auth secret error: %s", err)
 	}
 
-	filename := getFilename(sec.Metadata)
-	authFile := path.Join(*nginx.Prefix, ngxAuthFileDir, filename)
+	filepath := path.Join(*nginx.Prefix, ngxAuthFileDir, getSecretFilename(sec.Metadata))
 
 	if !remake {
-		if _, err := os.Stat(authFile); err == nil {
-			return path.Join(ngxAuthFileDir, filename), nil
+		if _, err := os.Stat(filepath); err == nil {
+			return withoutNgxPrefix(filepath), nil
 		}
 	}
 
@@ -65,11 +68,11 @@ func (c *Controller) setupAuthSecret(namespace, name string, remake bool) (strin
 		return "", errors.New("auth secret missing `auth` key")
 	}
 
-	if err = ioutil.WriteFile(authFile, auth, 0777); err != nil {
+	if err = ioutil.WriteFile(filepath, auth, 0777); err != nil {
 		return "", err
 	}
 
-	return path.Join(ngxAuthFileDir, filename), nil
+	return withoutNgxPrefix(filepath), nil
 }
 
 func (c *Controller) setupTlsSecret(namespace, name string, remake bool) (crt string, key string, err error) {
@@ -90,7 +93,7 @@ func (c *Controller) setupTlsSecret(namespace, name string, remake bool) (crt st
 		filepath := path.Join(
 			*nginx.Prefix,
 			ngxTlsDir,
-			fmt.Sprintf("%s-%s", sec.Metadata.Namespace, sec.Metadata.Name),
+			getSecretFilename(sec.Metadata),
 		)
 
 		if _, err := os.Stat(filepath); err != nil {
@@ -111,7 +114,7 @@ func (c *Controller) setupTlsSecret(namespace, name string, remake bool) (crt st
 			}
 		}
 
-		return strings.TrimPrefix(filepath, *nginx.Prefix+"/"), nil
+		return withoutNgxPrefix(filepath), nil
 	}
 
 	if key, err = write("tls.key"); err != nil {
@@ -130,7 +133,7 @@ func (c *Controller) addIngress(is *ingress.Ingress) error {
 
 	var basicAuthConf *nginx.BasicAuthConf
 
-	if ns, name := getAuthSecret(is); name != "" {
+	if ns, name := getAuthSecretInfo(is); name != "" {
 		if userfile, err := c.setupAuthSecret(ns, name, false); err != nil {
 			return fmt.Errorf("setupAuthSecret: %s, ingress=%s", err, is.Name())
 		} else {
@@ -199,8 +202,12 @@ func (c *Controller) deleteIngress(is *ingress.Ingress) {
 		c.ngx.DeleteLocation(rule.Host, is.Name())
 	}
 
-	if ns, name := getAuthSecret(is); name != "" {
+	if ns, name := getAuthSecretInfo(is); name != "" {
 		c.secretInformer.Release(ns, name)
+	}
+
+	for _, tls := range is.Spec.TLS {
+		c.secretInformer.Release(is.Metadata.Namespace, tls.SecretName)
 	}
 
 	delete(c.issCache, is.Name())
@@ -286,7 +293,7 @@ func (c *Controller) Run(ctx context.Context) error {
 	}
 
 	onSecretRelease := func(s *secret.Secret) {
-		authfile := path.Join(*nginx.Prefix, ngxAuthFileDir, getFilename(s.Metadata))
+		authfile := path.Join(*nginx.Prefix, ngxAuthFileDir, getSecretFilename(s.Metadata))
 		log.Printf("controller: release secret %s", s.Name())
 
 		if err := os.Remove(authfile); err != nil {
