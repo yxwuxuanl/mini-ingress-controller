@@ -110,7 +110,6 @@ func (ngx *Nginx) AddLocation(host string, loc *Location, tlsConf *TLSConf) erro
 	}
 
 	locations[loc.Path.String()] = loc
-	log.Printf("nginx: add location %s, server_name=%s", loc.Path.String(), host)
 	return nil
 }
 
