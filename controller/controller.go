@@ -35,17 +35,6 @@ func withoutNgxPrefix(p string) string {
 	return strings.TrimPrefix(p, *nginx.Prefix+"/")
 }
 
-func getAuthSecretInfo(is *ingress.Ingress) (namespace, name string, ok bool) {
-	if name = is.Metadata.Annotations[annotation.AuthSecret]; name != "" {
-		if namespace = is.Metadata.Annotations[annotation.AuthSecretNamespace]; namespace == "" {
-			namespace = is.Metadata.Namespace
-		}
-		ok = true
-	}
-
-	return
-}
-
 func (c *Controller) setupAuthSecret(namespace, name string, remake bool) (userfile string, err error) {
 	sec := new(secret.Secret)
 	err = c.secretInformer.Get(namespace, name, secret.ReadFunc(namespace, name), &sec)
@@ -150,7 +139,7 @@ func (c *Controller) addIngress(is *ingress.Ingress) error {
 
 	var basicAuthConf *nginx.BasicAuthConf
 
-	if ns, name, ok := getAuthSecretInfo(is); ok {
+	if ns, name, ok := annotation.ParseAuthSecret(is); ok {
 		if userfile, err := c.setupAuthSecret(ns, name, false); err != nil {
 			return fmt.Errorf("setupAuthSecret: %s", err)
 		} else {
@@ -240,7 +229,7 @@ func (c *Controller) deleteIngress(is *ingress.Ingress) {
 		c.ngx.DeleteLocation(rule.Host, is.Name())
 	}
 
-	if ns, name, ok := getAuthSecretInfo(is); ok {
+	if ns, name, ok := annotation.ParseAuthSecret(is); ok {
 		c.secretInformer.Release(ns, name)
 	}
 
