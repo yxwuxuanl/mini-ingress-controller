@@ -2,6 +2,7 @@ package kube
 
 import (
 	"context"
+	"log"
 )
 
 type informerHandler[T Object] func(T)
@@ -9,6 +10,12 @@ type informerHandler[T Object] func(T)
 type informerRef[T Object] struct {
 	refCount int
 	obj      T
+}
+
+func (ref *informerRef[T]) add(i int) int {
+	ref.refCount += i
+	log.Printf("informer: %s ref=%d", ref.obj.Name(), ref.refCount)
+	return ref.refCount
 }
 
 type Informer[T Object] struct {
@@ -27,7 +34,7 @@ func (i *Informer[T]) Get(namespace, name string, readFunc ReadFunc, obj *T) err
 	fullname := namespace + "/" + name
 
 	if ref, ok := i.ref[fullname]; ok {
-		ref.refCount++
+		ref.add(1)
 		*obj = ref.obj
 		return nil
 	}
@@ -36,10 +43,9 @@ func (i *Informer[T]) Get(namespace, name string, readFunc ReadFunc, obj *T) err
 		return err
 	}
 
-	ref := &informerRef[T]{
-		obj:      *obj,
-		refCount: 1,
-	}
+	ref := &informerRef[T]{obj: *obj}
+
+	ref.add(1)
 
 	i.ref[fullname] = ref
 	return nil
@@ -49,11 +55,9 @@ func (i *Informer[T]) Release(namespace, name string) {
 	fullname := namespace + "/" + name
 
 	if ref, ok := i.ref[fullname]; ok {
-		if ref.refCount <= 1 {
+		if ref.add(-1) <= 0 {
 			i.OnRelease(ref.obj)
 			delete(i.ref, fullname)
-		} else {
-			ref.refCount--
 		}
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -45,8 +46,15 @@ type WatchHandler[T Object] struct {
 	Modified func(T)
 }
 
+func newRequest() *http.Request {
+	r := new(http.Request)
+	r.URL = new(url.URL)
+	r.Header = make(http.Header)
+	return r
+}
+
 func List[T any](client Client, listFunc ReadFunc, items *[]T) error {
-	r := client.Request()
+	r := newRequest()
 	listFunc(r)
 
 	res, err := client.Do(r)
@@ -77,7 +85,7 @@ func List[T any](client Client, listFunc ReadFunc, items *[]T) error {
 }
 
 func Get[T Object](client Client, listFunc ReadFunc, obj T) error {
-	r := client.Request()
+	r := newRequest()
 	listFunc(r)
 
 	res, err := client.Do(r)
@@ -105,7 +113,7 @@ func Watch[T Object](
 	defer close(eventCh)
 
 	doWatch := func() error {
-		r := client.Request()
+		r := newRequest()
 		watchFunc(r)
 
 		log.Printf("kube: watch %s", r.URL.Path)

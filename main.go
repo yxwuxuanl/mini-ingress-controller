@@ -18,6 +18,7 @@ var (
 	ngxListenPort        = flag.Int("ngx.listen", 80, "")
 	ngxHttpsListenPort   = flag.Int("ngx.https-listen", 443, "")
 	ngxUser              = flag.String("ngx.user", "nginx", "")
+	ngxLogLevel          = flag.String("ngx.log-level", "notice", "")
 	ngxAccessLog         = flag.String("ngx.access-log", "/dev/stdout", "")
 	kubeProxy            = flag.String("kube.proxy", "", "")
 )
@@ -36,6 +37,7 @@ func main() {
 	ngxConf := &nginx.Main{
 		WorkerProcesses:   *ngxWorkerProcesses,
 		WorkerConnections: *ngxWorkerConnections,
+		LogLevel:          *ngxLogLevel,
 		User:              *ngxUser,
 	}
 

@@ -5,11 +5,11 @@ import (
 	"crypto/x509"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 )
 
 type Client interface {
-	Request() *http.Request
 	Do(r *http.Request) (*http.Response, error)
 }
 
@@ -18,20 +18,12 @@ type InClusterClient struct {
 	token  string
 }
 
-func (i *InClusterClient) Request() *http.Request {
-	r, _ := http.NewRequest(
-		http.MethodGet,
-		"https://"+os.Getenv("KUBERNETES_SERVICE_HOST")+":"+os.Getenv("KUBERNETES_SERVICE_PORT_HTTPS"),
-		nil,
-	)
-
-	r.Header = make(http.Header)
+func (i *InClusterClient) Do(r *http.Request) (*http.Response, error) {
+	u := r.URL
+	u.Scheme = "https"
+	u.Host = os.Getenv("KUBERNETES_SERVICE_HOST") + ":" + os.Getenv("KUBERNETES_SERVICE_PORT_HTTPS")
 	r.Header.Set("Authorization", "Bearer "+i.token)
 
-	return r
-}
-
-func (i *InClusterClient) Do(r *http.Request) (*http.Response, error) {
 	return i.client.Do(r)
 }
 
@@ -69,18 +61,20 @@ func NewInClusterClient() *InClusterClient {
 }
 
 type ProxyClient struct {
-	proxyAddr string
-}
-
-func (p *ProxyClient) Request() *http.Request {
-	r, _ := http.NewRequest(http.MethodGet, p.proxyAddr, nil)
-	return r
+	endpoint *url.URL
 }
 
 func (p *ProxyClient) Do(r *http.Request) (*http.Response, error) {
+	r.URL.Scheme = p.endpoint.Scheme
+	r.URL.Host = p.endpoint.Host
+
 	return http.DefaultClient.Do(r)
 }
 
 func NewProxyClient(proxyAddr string) *ProxyClient {
-	return &ProxyClient{proxyAddr: proxyAddr}
+	if u, err := url.Parse(proxyAddr); err != nil {
+		panic(err)
+	} else {
+		return &ProxyClient{endpoint: u}
+	}
 }

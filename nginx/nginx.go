@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path"
 	"syscall"
 	"text/template"
 	"time"
@@ -179,6 +180,10 @@ func (ngx *Nginx) Reload() {
 func (ngx *Nginx) Run() error {
 	if noNgx {
 		return nil
+	}
+
+	if err := os.WriteFile(path.Join(*Prefix, "proxy_params"), []byte(proxyPassParams), 0777); err != nil {
+		return err
 	}
 
 	cmd := exec.Command("nginx", "-p", *Prefix)

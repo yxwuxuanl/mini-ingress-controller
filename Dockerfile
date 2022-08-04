@@ -1,4 +1,6 @@
-FROM golang:1.18 AS build
+ARG GO_VERSION=1.18
+
+FROM golang:${GO_VERSION} AS build
 
 WORKDIR /app
 
@@ -11,7 +13,9 @@ COPY . .
 
 RUN go build -o ingress-controller && chmod +x ./ingress-controller
 
-FROM nginx:1.23.1
+ARG NGX_VERSION=1.23
+
+FROM nginx:${NGX_VERSION}
 
 COPY --from=build /app/ingress-controller /ingress-controller
 

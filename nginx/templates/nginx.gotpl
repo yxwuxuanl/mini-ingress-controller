@@ -1,5 +1,5 @@
 {{/*@formatter:off*/}}
-{{- /*gotype: ingress-controller/nginx.Config*/ -}}
+{{- /*gotype: ingress-controller/nginx.Main*/ -}}
 # BuildTime: {{ now }}
 daemon off;
 {{- with .User }}
@@ -12,7 +12,7 @@ worker_processes auto;
 worker_processes {{ printf "%d" .WorkerProcesses }};
 {{- end }}
 
-error_log  /dev/stdout notice;
+error_log  /dev/stdout {{ .LogLevel }};
 {{- with .PidFile }}
 pid        {{ . }};
 {{- end }}
