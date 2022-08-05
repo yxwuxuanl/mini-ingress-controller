@@ -189,7 +189,7 @@ func (c *Controller) addIngress(is *ingress.Ingress) error {
 		tlsConfig, err := getTlsConf(rule.Host)
 
 		if err != nil {
-			log.Printf("addIngress: getTlsConf error: %s, host=%s", err, rule.Host)
+			log.Printf("controller: getTlsConf error: %s, host=%s", err, rule.Host)
 			continue
 		}
 
@@ -215,6 +215,24 @@ func (c *Controller) addIngress(is *ingress.Ingress) error {
 
 			if err = c.ngx.AddLocation(rule.Host, loc, tlsConfig); err != nil {
 				log.Printf("addIngress: %s, ingress=%s, path=%s", err, is.Name(), loc.Path.String())
+			}
+		}
+
+		if tlsConfig != nil && is.Metadata.Annotations[annotation.ForceSSLRedirect] == "true" {
+			err := c.ngx.AddLocation(rule.Host, &nginx.Location{
+				Path: nginx.Path{
+					Path:     "/",
+					PathType: ingress.PathTypePrefix,
+				},
+				Return: &nginx.ReturnConf{
+					Code: 301,
+					Text: "https://$host$request_uri",
+				},
+				IngressRef: is.Name(),
+			}, nil)
+
+			if err != nil {
+				log.Printf("controller: add ssl redirect rule error: %s, ingress=%s, host=%s", err, is.Name(), rule.Host)
 			}
 		}
 	}
@@ -382,7 +400,7 @@ func (c *Controller) Run(ctx context.Context) error {
 	for _, is := range iss {
 		if ingress.FilterIngress(is) {
 			if err := c.addIngress(is); err != nil {
-				log.Printf("controller: addIngress: %s, ingrsss=%s", err, is.Name())
+				log.Printf("controller: %s, ingrsss=%s", err, is.Name())
 			}
 		}
 	}

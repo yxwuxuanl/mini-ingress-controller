@@ -43,7 +43,7 @@ server {
   {{- end }}
 
   {{- with $location.Return }}
-    return {{ .StatusCode }} "{{ .Status }}";
+    return {{ .Code }} "{{ .Text }}";
   {{- end }}
 
   {{- with $location.ProxyPass }}

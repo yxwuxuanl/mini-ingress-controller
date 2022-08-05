@@ -219,8 +219,8 @@ func New(mainConf *Main, httpConf *Http) *Nginx {
 			PathType: ingress.PathTypeExact,
 		},
 		Return: &ReturnConf{
-			Status:     "ok",
-			StatusCode: 200,
+			Text: "ok",
+			Code: 200,
 		},
 		DisableAccessLog: true,
 	}

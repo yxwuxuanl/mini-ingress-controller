@@ -2,7 +2,6 @@ package kube
 
 import (
 	"context"
-	"log"
 )
 
 type informerHandler[T Object] func(T)
@@ -14,7 +13,6 @@ type informerRef[T Object] struct {
 
 func (ref *informerRef[T]) add(i int) int {
 	ref.refCount += i
-	log.Printf("informer: %s ref=%d", ref.obj.Name(), ref.refCount)
 	return ref.refCount
 }
 

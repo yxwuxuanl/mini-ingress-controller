@@ -59,8 +59,8 @@ type Location struct {
 }
 
 type ReturnConf struct {
-	StatusCode int
-	Status     string
+	Code int
+	Text string
 }
 
 type TLSConf struct {
