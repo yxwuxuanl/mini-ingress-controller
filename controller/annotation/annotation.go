@@ -1,13 +1,14 @@
 package annotation
 
-import "ingress-controller/kube/ingress"
+import (
+	"ingress-controller/kube/ingress"
+)
 
 const (
 	Prefix              = "nginx.ingress.kubernetes.io/"
 	AuthSecret          = Prefix + "auth-secret"
 	AuthSecretNamespace = Prefix + "auth-secret-namespace"
 	EnableAccessLog     = Prefix + "enable-access-log"
-	RewriteTarget       = Prefix + "rewrite-target"
 	ForceSSLRedirect    = Prefix + "force-ssl-redirect"
 )
 

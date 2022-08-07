@@ -12,6 +12,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 )
 
@@ -150,6 +151,23 @@ func (c *Controller) addIngress(is *ingress.Ingress) error {
 		}
 	}
 
+	var directives []nginx.Directive
+
+	setProxyTimeout := func(key string) {
+		if v, ok := is.Metadata.Annotations[fmt.Sprintf(annotation.Prefix+"proxy-%s-timeout", key)]; ok {
+			if iv, _ := strconv.Atoi(v); iv > 0 {
+				directives = append(directives, nginx.Directive{
+					fmt.Sprintf("proxy_%s_timeout", key),
+					v + "s",
+				})
+			}
+		}
+	}
+
+	setProxyTimeout("read")
+	setProxyTimeout("connect")
+	setProxyTimeout("send")
+
 	tlsConfs := map[string]*nginx.TLSConf{}
 
 	getTlsConf := func(host string) (*nginx.TLSConf, error) {
@@ -199,6 +217,7 @@ func (c *Controller) addIngress(is *ingress.Ingress) error {
 					Path:     isPath.Path,
 					PathType: isPath.PathType,
 				},
+				Directives:       directives,
 				IngressRef:       is.Name(),
 				DisableAccessLog: is.Metadata.Annotations[annotation.EnableAccessLog] == "false",
 				BasicAuth:        basicAuthConf,
