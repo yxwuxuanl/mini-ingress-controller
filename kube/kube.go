@@ -35,7 +35,7 @@ type Metadata struct {
 
 type ReadFunc func(r *http.Request)
 
-type Event[T any] struct {
+type Event[T Object] struct {
 	Type   string `json:"type"`
 	Object T      `json:"object"`
 }
@@ -53,7 +53,7 @@ func newRequest() *http.Request {
 	return r
 }
 
-func List[T any](client Client, listFunc ReadFunc, items *[]T) error {
+func List[T Object](client Client, listFunc ReadFunc, items *[]T) error {
 	r := newRequest()
 	listFunc(r)
 

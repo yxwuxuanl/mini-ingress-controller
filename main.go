@@ -6,6 +6,8 @@ import (
 	"ingress-controller/controller"
 	"ingress-controller/kube"
 	"ingress-controller/nginx"
+	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
@@ -22,6 +24,7 @@ var (
 	ngxLogLevel          = flag.String("ngx.log-level", "notice", "")
 	ngxAccessLog         = flag.String("ngx.access-log", "/dev/stdout", "")
 	kubeProxy            = flag.String("kube.proxy", "", "")
+	pprofAddr            = flag.String("pprof.addr", "", "")
 )
 
 func main() {
@@ -66,6 +69,11 @@ func main() {
 			panic(err)
 		}
 	}()
+
+	if *pprofAddr != "" {
+		http.HandleFunc("/debug/pprof/heap", pprof.Index)
+		go http.ListenAndServe(*pprofAddr, nil)
+	}
 
 	<-ctx.Done()
 	ctr.Shutdown()

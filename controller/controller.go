@@ -223,13 +223,21 @@ func (c *Controller) addIngress(is *ingress.Ingress) error {
 				BasicAuth:        basicAuthConf,
 			}
 
-			loc.ProxyPass = &nginx.ProxyPassConf{
-				Upstream: fmt.Sprintf(
-					"http://%s.%s:%d",
-					isPath.Backend.Service.Name,
-					is.Metadata.Namespace,
-					isPath.Backend.Service.Port.Number,
-				),
+			if v, ok := is.Metadata.Annotations[annotation.UseRegex]; ok {
+				loc.Path.Regex = v == "true"
+			}
+
+			if rewrite, ok := is.Metadata.Annotations[annotation.RewriteTarget]; ok {
+				loc.Return = &nginx.ReturnConf{Code: 301, Text: rewrite}
+			} else {
+				loc.ProxyPass = &nginx.ProxyPassConf{
+					Upstream: fmt.Sprintf(
+						"http://%s.%s:%d",
+						isPath.Backend.Service.Name,
+						is.Metadata.Namespace,
+						isPath.Backend.Service.Port.Number,
+					),
+				}
 			}
 
 			if err = c.ngx.AddLocation(rule.Host, loc, tlsConfig); err != nil {

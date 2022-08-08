@@ -10,6 +10,8 @@ const (
 	AuthSecretNamespace = Prefix + "auth-secret-namespace"
 	EnableAccessLog     = Prefix + "enable-access-log"
 	ForceSSLRedirect    = Prefix + "force-ssl-redirect"
+	RewriteTarget       = Prefix + "rewrite-target"
+	UseRegex            = Prefix + "use-regex"
 )
 
 func ParseAuthSecret(is *ingress.Ingress) (namespace, name string, ok bool) {
