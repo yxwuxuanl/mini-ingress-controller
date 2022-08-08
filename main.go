@@ -18,6 +18,7 @@ var (
 	ngxListenPort        = flag.Int("ngx.listen", 80, "")
 	ngxHttpsListenPort   = flag.Int("ngx.https-listen", 443, "")
 	ngxUser              = flag.String("ngx.user", "nginx", "")
+	ngxHttp2             = flag.Bool("ngx.http2", true, "")
 	ngxLogLevel          = flag.String("ngx.log-level", "notice", "")
 	ngxAccessLog         = flag.String("ngx.access-log", "/dev/stdout", "")
 	kubeProxy            = flag.String("kube.proxy", "", "")
@@ -42,6 +43,7 @@ func main() {
 	}
 
 	httpConf := &nginx.Http{
+		Http2:     *ngxHttp2,
 		LogFormat: *ngxLogFormat,
 		Listen:    *ngxListenPort,
 		TLSListen: *ngxHttpsListenPort,

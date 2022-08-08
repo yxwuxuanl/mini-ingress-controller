@@ -1,22 +1,27 @@
 {{/*@formatter:off*/}}
 {{- /*gotype: ingress-controller/nginx.Http*/ -}}
 # BuildTime: {{ now }}
+
+include       ./mime.types;
 log_format  main  {{ .LogFormat }};
 access_log  {{ .AccessLog }}  main;
 default_type text/plain;
 
+charset                utf-8;
+sendfile               on;
+tcp_nopush             on;
+tcp_nodelay            on;
+
+ssl_session_timeout    1d;
+ssl_session_cache      shared:SSL:10m;
+ssl_session_tickets    off;
+
 {{ range $_, $server := .AllServers }}
 server {
   server_name {{ $server.ServerName }};
-  {{- if eq $server.ServerName "_" }}
-  listen {{ printf "%d" $.Listen }} default_server;
-  {{- else }}
-{{- if $server.SSL }}
-  listen {{ printf "%d" $.TLSListen }} ssl;
-  {{- else }}
-  listen {{ printf "%d" $.Listen }};
-  {{- end }}
-  {{- end }}
+  listen {{- if $server.SSL }} {{ printf "%d" $.TLSListen }} ssl{{ if $.Http2 }} http2{{ end }}{{ end }}
+    {{- if not $server.SSL }} {{ printf "%d" $.Listen }}{{ end }}
+    {{- if eq $server.ServerName "_" }} default_server{{ end }};
 
   {{- with $server.SSL }}
   ssl_certificate {{ .Cert }};

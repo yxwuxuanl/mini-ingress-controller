@@ -86,6 +86,7 @@ type Main struct {
 }
 
 type Http struct {
+	Http2      bool
 	LogFormat  string
 	AccessLog  string
 	Listen     int
